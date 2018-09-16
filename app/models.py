@@ -4,15 +4,16 @@ from django.db import models
 
 
 class UserType(models.Model):
-    id = models.IntegerField(unique=True)
-    name = models.CharField(max_length=32, primary_key=True)
+    type_name = models.CharField(max_length=32)
+
+    def __str__(self):
+        return self.type_name
 
 
 class User(models.Model):
-    name = models.CharField(max_length=32)
-    password = models.CharField(max_length=32)
-    email = models.CharField(max_length=64)
+    nid = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=32, db_index=True)
+    password = models.CharField(max_length=32, db_index=True)
+    email = models.EmailField(max_length=64)
     ut = models.ForeignKey(to='UserType', to_field='id', on_delete=True)
-
-
 

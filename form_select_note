@@ -1,0 +1,273 @@
+Django 基础操作尾声
+使用model和form单独分开方式，做好解耦，除非小型项目，不使用ModelForm
+一、Model操作补充
+	1.创建数据库表，结构
+	  # 单表
+	  # app01_user ==> tb1
+	  class User(models.Model):
+	      name = models.CharField(max_length=32)
+		  pwd = models.CharField(max_length=32)
+		  class Meta:
+		      # 数据库中生成表名称 默认app名称+下划线+类名
+			  db_table = "tb1" # 这样就只显示tb1不会再有前缀的app名称
+			  index_together = [
+			      ("name", "email")
+			  ]
+			  # 索引遵循最左前缀的模式
+			  # select * from tb1 where name = 'xx' 命中
+			  # select * from tb1 where name = 'xx' and email = 'xx' 命中
+			  # select * from tb1 where email = 'xx' 无法命中索引
+			  # 联合唯一索引，组合唯一
+			  unique_together = (("name", "email"),)
+			  verbose_name = "上课记录" # 页面显示
+			  verbose_name_plural= ""上课记录""
+
+		# 一对多/一对一/多对多
+		def func():
+			return 5
+
+		class UserType(models.Model):
+			name = models.CharField(max_length=32)
+
+		class User(models.Model):
+			name = models.CharField(max_length=32)
+			pwd = models.CharField(max_length=32)
+			...		ForeignKey(to="UserType", to_field='id', on_delete= models.set(func)
+			...		ForeignKey(to="UserType", to_field='id', on_delete= models.set(lambda : 5)# lambda函数 冒号前面参数，后面返回值
+
+
+		反向查找，由user表查找UserType表数据，
+		v = UserType.objects.all()
+		for item in v:
+			item.name
+			item.id
+			item.user_set.all() # 当前用户类型对应所有的用户，一条或者多条
+		默认方式user_set.all()
+
+		反向查找：由UserType表查找User表数据
+		models.UserType.objects.all().values('name','user__pwd')
+		总结, ut = models.ForeignKey(to='UserType', to_field='id', related_query_name='xxx')
+		related_query_name='xxx'参数存在时
+		正向查找中 user_set 替换成 'xxx'
+		反向查找中 反向查找表名,替换成  'xxx'
+
+		而related_name = 'xxx' 参数，只影响正向查找中的 user_set, user_set 替换成xxx
+		简单而言：
+				related_name = 'xxx' 替换正向 user_set 为 xxx
+				related_query_name = 'xxx’ 替换正向 user_set 为 xxx, 替换反向user__pwd 为  xxx__pwd ( 反向查找双'_')
+
+		related_name = 'xxx'   对应  user_set    -- >  xxx_set
+		related_query_name = 'xxx'  对应  user__pwd -- > xxx__pwd
+
+
+	多对多
+		a. Django 创建第三张表
+			- m2m.remove
+			- m2m.add
+			- m2m.set
+			- m2m.clear
+			- m2m.filter()
+		b. 自定义第三张表(无m2m字段)
+			- 自己连表查询
+
+		c. 自定义第三张表(有m2m字段)
+			- m2m.filter()
+			场景：半自定义，不让第三张m2m自动创建
+				- through='B2T' 指定第三张表名，第三张表为自定义
+				- through_field=['b', 't1'] 选择指定的第三张表的 关联操作字段
+				- m2m.filter() (m2m方法少)
+			class Blog(models.Model):
+				site = models.CharField(max_length=32)
+				m = models.ManyToManyField('Tag', through='B2T', through_field=['b', 't1'])
+			class Tag(models.Model):
+				name = models.CharField(max_length=32)
+			class B2T(models.Model):
+				b = models.ForeignKey('Blog')
+				t1 = models.ForeignKey('Tag')
+				t2 = models.ForeignKey('Tag')
+				status = models.InterFiled()
+
+
+	2.操作数据库表
+		order by
+			- models.Tb1.objects.filter(name='seven'),order_by('id') # asc
+			- models.Tb1.objects.filter(name='seven'),order_by('-id') # desc
+		group by
+			- count,min,max,sum需要单独导入
+			  from django.db.models import Count,Min,Max,Sum
+
+			- models.Tb1.objects.filter(c1=1).values('id').annotate(c=Count('num)
+											# annotate意思是根据value指定的字段进行分组，分组完成后获取每个组个数
+
+			- 上面操作等于
+			  SELECT 'app01_tb1'.'id', count('app01_tb1','num') as "c" from "app01_tb1" where "app01_tb1"."c1" = 1
+			  GROUP BY "app01_tb1"."id"
+			  sql中，group by 的筛选条件，使用 having
+
+			  所以 group by 后面的.filter(xxx),是having ,放在前面，就是where
+
+			  useing的使用，读写分离场景，可以操作2个数据库，默认增删改使用default,读通过useing使用slave
+		- 基本操作
+		- QuerySet中的方法:
+			- 返回QuerySet类型，
+				- 性能相关,必须掌握(select_related, prefetch_related)
+
+				- select_related(arg)主动帮我们进行链表查询，参数arg只能是fk字段名
+
+					users = models.User.objects.all().select_related('ut')
+					# 有select_related参数，一次性指定获取db中的fk指定字段的所有值对象
+					for row in user:
+						print(row.user,row.pwd,row.id)
+						print(row.ut.name) # 无select_related在发起一次请求
+				- prefetch_related 不做连表查询，但是会进行多次查询
+				  prefetch_related进行 多次单表查询，结果存入内存，django内部从内存中获取数据就行类似的连表返回
+
+				  users = models.User.objects.filter(id__gt=30).prefetch_related('ut')
+				  # select * from users where id > 30；
+				  # 获取上一次查询到的结果中，所有的ut_id，存入列表,比如 ut_id = [1,2]
+				  # select * from user_type where id in [1,2]
+				  for row in users:
+					print(row.user)
+					print(row.ut.name)
+
+				- 执行原生sql
+					obj = models.user.objects.raw('select * from user')
+
+		- values 获取每行数据为字典
+		- values_list 获取每行数据为元组
+	3.数据验证(非常弱的数据验证)
+		full_clean 数据验证（弱）
+		- 每个字段的正则
+		- clean 钩子
+
+二、Form操作
+	1.数据验证(非常强大的验证功能和插件)
+		- Form-select 操作数据库表获取数据的2种方式
+
+			models.py # 数据库表创建
+			from django.db import models
+			# Create your models here.
+
+			class UserType(models.Model): # 用户类型表
+				type_name = models.CharField(max_length=32)
+
+				def __str__(self): # 和form操作中 ModelChoiceField或ModelMultipleChoiceField 连用，不然获取的都是queryset；ModelChoiceField 依赖str返回的数据
+					return self.type_name
+
+
+			class User(models.Model):
+				nid = models.AutoField(primary_key=True)
+				name = models.CharField(max_length=32, db_index=True)
+				password = models.CharField(max_length=32, db_index=True)
+				email = models.EmailField(max_length=64)
+				ut = models.ForeignKey(to='UserType', to_field='id', on_delete=True)
+
+			forms.py # 创建form操作类
+				第一类，2种方式：对应 user_type1和 user_type2,需要在init中定义，每次初始化重新在DB中获取数据，而不是使用静态字段内存中数据
+					from app import models
+					from django import forms
+					from django.forms import fields, widgets
+
+
+					class UserInfoForm(forms.Form):
+						user = fields.CharField(
+							required=False,
+							widget=widgets.Textarea(attrs={'class': 'c1'})
+						)
+						pwd = fields.CharField(
+							max_length=12,
+							widget=widgets.PasswordInput(attrs={'class': 'c2'})
+						)
+						user_type = fields.ChoiceField(
+							# choices=[(1, '普通'), (2, '超级'), (3, '访客')],
+							# choices=models.UserType.objects.values_list('id', 'type_name'),
+							choices=[],
+							widget=widgets.Select
+						)
+						# user_type2 = fields.CharField(widget=widgets.Select(choices=[(1, '普通用户'), (2, '超级用户'), ]))
+						user_type2 = fields.CharField(widget=widgets.Select(choices=[]))
+						# 验证(*)
+						# 生成HTML（保留上一次提交的数据)
+						# 解URL方式操作(Form方式)
+						# Ajax请求, 验证(*) 生成HTML  验证(*)
+						# def __init__(self, *args, **kwargs):
+						#     super(UserInfoForm.self).__init__(*args, **kwargs)
+						#     self.fields['user_type'].choices = models.UserType.objects.values_list('id','name')
+						#     self.fields['user_type2'].widget.choices = models.UserType.objects.values_list('id', 'name')
+
+						def __init__(self, *args, **kwargs):
+							super(UserInfoForm, self).__init__()
+							self.fields['user_type'].choices = models.UserType.objects.values_list('id', 'type_name')
+							self.fields['user_type2'].widget.choices = models.UserType.objects.values_list('id', 'type_name')
+
+				第二种,2中选择方式ModelChoiceField，ModelMultipleChoiceField
+					# user_type3,user_type4方式获取数据，type4为多选，不支持type中个别参数使用
+					'''
+					type3,type4 获取数据，依赖于models.py中的def __str__(self): 返回的数据，如果没有此函数，则返回queryset
+
+					class UserType(models.Model): # 用户类型表
+						type_name = models.CharField(max_length=32)
+
+						def __str__(self): # 和form操作中 ModelChoiceField或ModelMultipleChoiceField 连用，不然获取的都是queryset；ModelChoiceField 依赖str返回的数据
+							return self.type_name
+
+
+
+
+
+					from app import models
+					from django import forms
+					from django.forms import fields, widgets, ModelChoiceField, ModelMultipleChoiceField
+
+
+					class UserInfoForm(forms.Form):
+						user = fields.CharField(
+							required=False,
+							widget=widgets.Textarea(attrs={'class': 'c1'})
+						)
+						pwd = fields.CharField(
+							max_length=12,
+							widget=widgets.PasswordInput(attrs={'class': 'c2'})
+						)
+
+						user_type3 = ModelChoiceField(
+							queryset=models.UserType.objects.all(),
+							empty_label="请选择用户类型",
+							to_field_name='id',
+						)
+						user_type4 = ModelMultipleChoiceField(
+							queryset=models.UserType.objects.all(),
+						)
+
+三、ModelForm操作(耦合性比较强, 业务多,定制化比较弱，代码不好拆分
+	适合小型项目)
+	1.数据库操作
+	2.数据验证
+	3.适用场景
+		-小型
+		-自定制admin (DjangoAdmin 使用的ModelForm定制)
+
+
+
+
+四、序列化操作
+
+
+
+五、Ajax $.ajax（调用xml http request 操作 )
+	通过ajax发请求，只能往自己网站发，不能发别人网站
+	这叫浏览器的（同源策略）限制
+
+	跨域ajax请求（jasonp, jsonp用来做跨域的ajax请求)
+	研究下 jsonp (jsonp是取巧方式)
+	CORS 跨站资源共享
+
+
+	-原生 ajax
+	-跨域请求(jsonp,CORS)
+	-Ajax上传文件
+
+六、验证码 （pillow模块）
+	- 基于session实现验证码的登录和注册
+
+

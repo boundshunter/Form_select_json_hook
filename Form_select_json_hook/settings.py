@@ -83,7 +83,10 @@ DATABASES = {
     'PASSWORD': 'gxw#mP8t',
     'HOST': '10.0.1.110',
     'PORT': '3306',
-    }
+    'OPTIONS': {
+        'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+    },
 }
 
 # Password validation
